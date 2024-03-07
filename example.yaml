@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: example-statefulset
+spec:
+  serviceName: "example"
+  replicas: 3
+  selector:
+    matchLabels:
+      app: example
+  template:
+    metadata:
+      labels:
+        app: example
+    spec:
+      containers:
+      - name: example-container
+        image: nginx
+        resources:
+          limits:
+            cpu: 10m
+            memory: 80Mi
+          requests:
+            cpu: 10m
+            memory: 80Mi
+        volumeMounts:
+        - name: storage
+          mountPath: /usr/share/nginx/html
+  volumeClaimTemplates:
+  - metadata:
+      name: storage
+      annotations:
+        pd-label-controller.terasky.com/labels: owner=daniel,project=test
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi
+      storageClassName: standard-rwo

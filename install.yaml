@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pd-label-controller
+  annotations:
+    iam.gke.io/gcp-service-account: ${GCP_SA_EMAIL}
+  labels:
+    app.kubernetes.io/name: pd-label-controller
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: pd-label-controller
+  labels:
+    app.kubernetes.io/name: pd-label-controller
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims","persistentvolumes"]
+    verbs: ["get","watch","list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: pd-label-controller-viewer
+  labels:
+    app.kubernetes.io/name: pd-label-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: pd-label-controller
+subjects:
+  - kind: ServiceAccount
+    name: pd-label-controller
+    namespace: default # change if namespace is not 'default'
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pd-label-controller
+  labels:
+    app.kubernetes.io/name: pd-label-controller  
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pd-label-controller
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pd-label-controller
+    spec:
+      serviceAccountName: pd-label-controller
+      containers:
+        - name: pd-label-controller
+          image: danielvaknin/gke-pd-label-controller:v0.1.16

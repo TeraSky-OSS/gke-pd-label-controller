@@ -1,0 +1,2 @@
+kubernetes==29.0.0
+google-cloud-compute==1.18.0
