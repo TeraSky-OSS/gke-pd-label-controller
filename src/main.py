@@ -56,7 +56,7 @@ def update_disk_labels(disk_id, labels):
 
     retry = Retry(
         predicate=lambda exc: isinstance(exc, PreconditionFailed),
-        initial=1.0,
+        initial=5.0,
         maximum=10.0,
         multiplier=2.0,
         deadline=60,
@@ -66,7 +66,14 @@ def update_disk_labels(disk_id, labels):
     @retry
     def retry_update_labels():
         existing_labels, fingerprint = fetch_disk_info(gcp_project, gcp_zone, gcp_disk_name)
-        updated_labels = {**existing_labels, **new_labels}  # Merge labels
+
+        # Filter labels to only labels created by Google
+        google_managed_labels = {}
+        for key, value in existing_labels.items():
+            if key.startswith('goog-'):
+                google_managed_labels[key] = value
+
+        updated_labels = {**google_managed_labels, **new_labels}  # Merge labels
         attempt_label_update(gcp_project, gcp_zone, gcp_disk_name, updated_labels, fingerprint)
 
     try:
@@ -75,71 +82,6 @@ def update_disk_labels(disk_id, labels):
         logging.error("Failed to update disk labels due to a precondition failure even after retries.")
     except Exception as e:
         logging.error(f"Unexpected error when updating labels for disk '{gcp_disk_name}': {e}")
-
-# def update_disk_labels(disk_id, labels):
-#     gcp_project = disk_id.split('/')[1]
-#     gcp_zone = disk_id.split('/')[3]
-#     gcp_disk_name = disk_id.split('/')[5]
-
-#     try:
-#         # Get the current state of the disk to obtain the labels fingerprint
-#         disk = compute_client.get(project=gcp_project, zone=gcp_zone, disk=gcp_disk_name)
-#         fingerprint = disk.label_fingerprint
-        
-#         # Prepare the request with the new labels and the current fingerprint
-#         disk_labels = compute_v1.Disk(labels=labels, label_fingerprint=fingerprint)
-#         request = compute_v1.SetLabelsDiskRequest(
-#             project=project,
-#             zone=zone,
-#             resource=disk_name,
-#             global_set_labels_request_resource=compute_v1.GlobalSetLabelsRequest(
-#                 label_fingerprint=fingerprint,
-#                 labels=labels
-#             ),
-#         )
-        
-#         # Execute the request with retries
-#         retry = Retry(predicate=lambda exc: isinstance(exc, PreconditionFailed), deadline=60)
-#         retry(compute_client.set_labels)(request=request)
-        
-#         logging.info(f"Successfully updated labels for disk {disk_name}")
-#     except PreconditionFailed:
-#         logging.error("Failed to update disk labels due to a precondition failure. Labels fingerprint might be invalid or resource labels have changed.")
-#     except Exception as e:
-#         logging.error(f"Unexpected error when updating labels for disk {disk_name}: {e}")
-
-#     # Get current disk labels
-#     current_labels = None
-#     label_fingerprint = None
-#     try:
-#         disk = compute_client.get(project=gcp_project, zone=gcp_zone, disk=gcp_disk_name)
-#         current_labels = disk.labels
-#         label_fingerprint = disk.label_fingerprint
-#         logging.info(f"Current labels for disk '{gcp_disk_name}': {current_labels}")
-#     except Exception as e:
-#         logging.error(f"Error getting labels for disk '{gcp_disk_name}': {e}")
-
-#     if current_labels != None and label_fingerprint != None:
-#         # Convert new labels list to dictionary
-#         new_labels = {}
-#         for label in labels:
-#             new_labels[label['key']] = label['value']
-        
-#         # Merge current and new labels
-#         merged_labels = {**current_labels, **new_labels}
-#         logging.info(f"All labels for disk '{gcp_disk_name}': {merged_labels}")
-
-#         # Update the disk labels in GCP
-#         try:
-#             compute_client.set_labels(
-#                 project=gcp_project, 
-#                 zone=gcp_zone, 
-#                 resource=gcp_disk_name, 
-#                 zone_set_labels_request_resource={"labels": merged_labels, "label_fingerprint": label_fingerprint}
-#             )
-#             logging.info(f"Successfully updated PD labels for '{gcp_disk_name}'")
-#         except Exception as e:
-#             logging.error(f"Error updating PD labels for '{gcp_disk_name}': {e}")
 
 
 logging.info(f'==============================================')
@@ -150,7 +92,7 @@ logging.info(f'==============================================')
 logging.info("Starting to watch for PV creation events")
 w = watch.Watch()
 for event in w.stream(v1.list_persistent_volume):
-    if event['type'] == 'ADDED':
+    if event['type'] == 'ADDED' or event['type'] == 'CHANGED':
         pv = event['object']
         pv_name = pv.metadata.name
         logging.info(f"Caught a creation event of PV with name '{pv_name}'")
