@@ -4,7 +4,9 @@
 
 This project provides a Kubernetes controller that automatically adds labels to GCP (Google Cloud Platform) disks based on annotations defined on Kubernetes PersistentVolumeClaims (PVCs). It's designed to run within a Google Kubernetes Engine (GKE) cluster and uses the Python programming language for its implementation.
 
-To add labels to GCP PDs, simply add the annotation `pd-label-controller.terasky.com/labels` with a comma-separated list of labels (for example: `owner=daniel,project=test`) to your PVC configuration.
+To add labels to GCP PDs, simply add the annotation `pd-label-controller.terasky.com/labels` with a comma-separated list of labels as its value (for example: `owner=daniel,project=test`) to your PVC configuration.
+
+> **Note:** Once the relevant annotation is added to a PVC, the controller will take ownership of the related PD labels, and will override all labels (not starting with `goog-`) with the labels defined in the annotation value.
 
 ## Prerequisites
 
