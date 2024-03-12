@@ -74,7 +74,11 @@ def update_disk_labels(disk_id, labels):
                 google_managed_labels[key] = value
 
         updated_labels = {**google_managed_labels, **new_labels}  # Merge labels
-        attempt_label_update(gcp_project, gcp_zone, gcp_disk_name, updated_labels, fingerprint)
+
+        if updated_labels != existing_labels:
+            attempt_label_update(gcp_project, gcp_zone, gcp_disk_name, updated_labels, fingerprint)
+        else:
+            logging.info(f"Disk '{gcp_disk_name}' already contains all required labels.")
 
     try:
         retry_update_labels()
@@ -88,47 +92,39 @@ logging.info(f'==============================================')
 logging.info(f'GKE PD Label Controller (Developed by TeraSky)')
 logging.info(f'==============================================')
 
-# Watch for PV events
-logging.info("Starting to watch for PV creation events")
 w = watch.Watch()
-for event in w.stream(v1.list_persistent_volume):
-    if event['type'] == 'ADDED' or event['type'] == 'CHANGED':
-        pv = event['object']
-        pv_name = pv.metadata.name
-        logging.info(f"Caught a creation event of PV with name '{pv_name}'")
+logging.info("Starting to watch for PVC creation/update events")
+for event in w.stream(v1.list_persistent_volume_claim_for_all_namespaces, timeout_seconds=0):
+    if event['type'] in ['ADDED', 'MODIFIED']:
+        pvc = event['object']
 
-        pvc_annotations = None
-        gcp_pd_id = None
+        pvc_annotations = pvc.metadata.annotations
+        if pvc.status.phase == 'Bound' and RESERVED_PVC_ANNOTATION in pvc_annotations.keys():
+            pvc_name = pvc.metadata.name
+            pvc_namespace = pvc.metadata.namespace
+            logging.info(f"Caught a creation/update event of a PVC with name '{pvc_name}' in namespace '{pvc_namespace}' that is bound to a PV and contains the annotation '{RESERVED_PVC_ANNOTATION}'")
 
-        claim_ref = pv.spec.claim_ref
-        if claim_ref:
-            try:
-                # Using the claim reference to fetch the PVC details
-                pvc = v1.read_namespaced_persistent_volume_claim(name=claim_ref.name, namespace=claim_ref.namespace)
-                logging.info(f"PV '{pv.metadata.name}' is bound to PVC '{pvc.metadata.name}' in namespace '{pvc.metadata.namespace}'")
+            # Get bound PV
+            pv_name = pvc.spec.volume_name
+            logging.info(f"PVC '{pvc_name}' is bound to PV '{pv_name}'")
+            pv = v1.read_persistent_volume(name=pv_name)
 
-                pvc_annotations = pvc.metadata.annotations
-            except client.exceptions.ApiException as e:
-                logging.error(f"Failed to get PVC '{claim_ref.name}' in namespace '{claim_ref.namespace}': {str(e)}")
-        else:
-            logging.info(f"PV '{pv.metadata.name}' is not bound to any PVC")
-        
-        if pv.spec.csi:
-            gcp_pd_id = pv.spec.csi.volume_handle
-            logging.info(f"Found GCP PD ID '{gcp_pd_id}' in PV '{pv_name}'")
-        else:
-            logging.info(f"PV '{pv_name}' is not backed by a GCP PD")
+            if pv.spec.csi:
+                gcp_pd_id = pv.spec.csi.volume_handle
+                logging.info(f"Found GCP PD ID '{gcp_pd_id}' in PV '{pv_name}'")
+            else:
+                logging.info(f"PV '{pv_name}' is not backed by a GCP PD")
 
-        if gcp_pd_id and pvc_annotations and RESERVED_PVC_ANNOTATION in pvc_annotations.keys():
-            logging.info(f"Found annotation '{RESERVED_PVC_ANNOTATION}' on PVC '{claim_ref.name}'")
-            pvc_labels_annotation_value = pvc_annotations[RESERVED_PVC_ANNOTATION]
-            labels_string = pvc_labels_annotation_value.replace(' ', '')
+            if gcp_pd_id:
+                pvc_labels_annotation_value = pvc_annotations[RESERVED_PVC_ANNOTATION]
+                labels_string = pvc_labels_annotation_value.replace(' ', '')
 
-            # Convert string of labels to list
-            labels = []
-            for label in labels_string.split(','):
-                key, value = label.split('=')
-                labels.append({'key': key, 'value': value})
+                # Convert string of labels to list
+                labels = []
+                for label in labels_string.split(','):
+                    key, value = label.split('=')
+                    labels.append({'key': key, 'value': value})
 
-            logging.info(f"Will apply the following labels to the PD: {labels}")
-            update_disk_labels(gcp_pd_id, labels)
+                logging.info(f"Will apply the following labels to the backed PD: {labels}")
+                update_disk_labels(gcp_pd_id, labels)
+                logging.info('------------------------------')

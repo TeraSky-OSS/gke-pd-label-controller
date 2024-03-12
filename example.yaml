@@ -1,39 +1,39 @@
-apiVersion: apps/v1
-kind: StatefulSet
+apiVersion: v1
+kind: PersistentVolumeClaim
 metadata:
-  name: example-statefulset
+  name: pvc-demo
+  annotations:
+    pd-label-controller.terasky.com/labels: daniel=test
 spec:
-  serviceName: "example"
-  replicas: 3
-  selector:
-    matchLabels:
-      app: example
-  template:
-    metadata:
-      labels:
-        app: example
-    spec:
-      containers:
-      - name: example-container
-        image: nginx
-        resources:
-          limits:
-            cpu: 10m
-            memory: 80Mi
-          requests:
-            cpu: 10m
-            memory: 80Mi
-        volumeMounts:
-        - name: storage
-          mountPath: /usr/share/nginx/html
-  volumeClaimTemplates:
-  - metadata:
-      name: storage
-      annotations:
-        pd-label-controller.terasky.com/labels: owner=daniel,project=test
-    spec:
-      accessModes: [ "ReadWriteOnce" ]
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 30Gi
+  storageClassName: standard-rwo
+---
+kind: Pod
+apiVersion: v1
+metadata:
+  name: pod-demo
+spec:
+  volumes:
+    - name: pvc-demo-vol
+      persistentVolumeClaim:
+       claimName: pvc-demo
+  containers:
+    - name: pod-demo
+      image: nginx
       resources:
+        limits:
+          cpu: 10m
+          memory: 80Mi
         requests:
-          storage: 1Gi
-      storageClassName: standard-rwo
+          cpu: 10m
+          memory: 80Mi
+      ports:
+        - containerPort: 80
+          name: "http-server"
+      volumeMounts:
+        - mountPath: "/usr/share/nginx/html"
+          name: pvc-demo-vol

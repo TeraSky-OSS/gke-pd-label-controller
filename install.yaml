@@ -53,4 +53,4 @@ spec:
       serviceAccountName: pd-label-controller
       containers:
         - name: pd-label-controller
-          image: danielvaknin/gke-pd-label-controller:v0.1.16
+          image: danielvaknin/gke-pd-label-controller:v0.1.27
