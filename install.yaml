@@ -1,7 +1,8 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: pd-label-controller
+  name: ${CONTROLLER_SA_NAME}
+  namespace: ${CONTROLLER_NAMESPACE}
   annotations:
     iam.gke.io/gcp-service-account: ${GCP_SA_EMAIL}
   labels:
@@ -30,13 +31,14 @@ roleRef:
   name: pd-label-controller
 subjects:
   - kind: ServiceAccount
-    name: pd-label-controller
-    namespace: default # change if namespace is not 'default'
+    name: ${CONTROLLER_SA_NAME}
+    namespace: ${CONTROLLER_NAMESPACE}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: pd-label-controller
+  namespace: ${CONTROLLER_NAMESPACE}
   labels:
     app.kubernetes.io/name: pd-label-controller  
 spec:
@@ -50,7 +52,7 @@ spec:
       labels:
         app.kubernetes.io/name: pd-label-controller
     spec:
-      serviceAccountName: pd-label-controller
+      serviceAccountName: ${CONTROLLER_SA_NAME}
       containers:
         - name: pd-label-controller
           image: danielvaknin/gke-pd-label-controller:v0.1.27

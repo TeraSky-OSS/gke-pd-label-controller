@@ -3,13 +3,13 @@ kind: PersistentVolumeClaim
 metadata:
   name: pvc-demo
   annotations:
-    pd-label-controller.terasky.com/labels: daniel=test
+    pd-label-controller.terasky.com/labels: owner=daniel,project=test
 spec:
   accessModes:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 30Gi
+      storage: 1Gi
   storageClassName: standard-rwo
 ---
 kind: Pod

@@ -29,12 +29,21 @@ cd gke-pd-label-controller
 ### Set Environment Variables
 
 ```bash
-export GCP_PROJECT_ID="skywiz-sandbox" # Change this according to your GCP project ID
-export GCP_SA_NAME="pd-label-controller"
-export GCP_SA_EMAIL="$GCP_SA_NAME@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
-export CONTROLLER_NAMESPACE="default"  # "pd-label-controller"
-export CONTROLLER_SA_NAME="pd-label-controller"
+export GCP_PROJECT_ID="" # Set your GCP project iD
+
+# Run the following commands to set additional environment variables
+export GCP_SA_NAME="pd-label-controller"                                      # You can modify this according to your needs
+export GCP_SA_EMAIL="$GCP_SA_NAME@${GCP_PROJECT_ID}.iam.gserviceaccount.com"  # DON'T change this
+export CONTROLLER_NAMESPACE="pd-label-controller"                             # You can modify this according to your needs
+export CONTROLLER_SA_NAME="pd-label-controller"                               # You can modify this according to your needs
 ```
+
+> Explanation for the environment variables:
+> - `GCP_PROJECT_ID` - The ID of the GCP project that your GKE cluster is running, and in which the Service Account will be created
+> - `GCP_SA_NAME` - The name of the GCP Service Account that will be created and used to update the labels on the GCP PDs
+> - `GCP_SA_EMAIL` - The full email of the GCP Service Account
+> - `CONTROLLER_NAMESPACE` - The GKE Kubernetes namespace in which you'll deploy the controller resources
+> - `CONTROLLER_SA_NAME` - The name of the GKE Kubernetes Service Account that will be created in within the cluster (in the chosen namespace)
 
 ### Create GCP Service Account
 
@@ -54,15 +63,16 @@ gcloud iam service-accounts add-iam-policy-binding $GCP_SA_EMAIL \
 ### Deploy GKE PD Label Controller
 
 ```bash
+kubectl create namespace $CONTROLLER_NAMESPACE
 cat install.yaml | envsubst | kubectl apply -f -
 ```
 
-> **Note:** `envsubst` is being used to replace the placeholder in the YAML file with the relevant environment variable
+> **Note:** `envsubst` is being used to replace the placeholders in the YAML file with the relevant environment variables
 
 You can validate that the controller is working by watching its logs:
 
 ```bash
-kubectl logs -f -l app.kubernetes.io/name=pd-label-controller
+kubectl -n $CONTROLLER_NAMESPACE logs -f -l app.kubernetes.io/name=pd-label-controller
 ```
 
 ## Usage
@@ -94,6 +104,21 @@ Once you verified that everything works as expected, don't forget to delete all 
 
 ```bash
 kubectl delete -f example.yaml
+```
+
+## Remove the Controller
+
+Run the following commands if you'd like to remove the controller from your environment
+
+```bash
+# Delete the controller from your GKE cluster
+cat install.yaml | envsubst | kubectl delete -f -
+
+# Delete the controller namespace from your GKE cluster
+kubectl delete namespace $CONTROLLER_NAMESPACE
+
+# Delete the GCP Service Account
+gcloud iam service-accounts delete $GCP_SA_EMAIL
 ```
 
 ## Development

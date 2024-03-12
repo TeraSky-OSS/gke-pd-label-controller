@@ -94,10 +94,12 @@ logging.info(f'==============================================')
 
 w = watch.Watch()
 logging.info("Starting to watch for PVC creation/update events")
+# Relevant docs: https://k8s-python.readthedocs.io/en/stable/genindex.html
 for event in w.stream(v1.list_persistent_volume_claim_for_all_namespaces, timeout_seconds=0):
     if event['type'] in ['ADDED', 'MODIFIED']:
         pvc = event['object']
 
+        # Relevant docs: https://github.com/kubernetes-client/python/blob/master/kubernetes/docs/V1PersistentVolumeClaim.md
         pvc_annotations = pvc.metadata.annotations
         if pvc.status.phase == 'Bound' and RESERVED_PVC_ANNOTATION in pvc_annotations.keys():
             pvc_name = pvc.metadata.name
