@@ -52,6 +52,8 @@ export CONTROLLER_SA_NAME="pd-label-controller"                               # 
 
 ### Create GCP Service Account
 
+> **Note:** The below steps needs to be performed only once per project.
+
 ```bash
 # Create tbe service account
 gcloud --project $GCP_PROJECT_ID iam service-accounts create $GCP_SA_NAME --display-name $GCP_SA_NAME
@@ -70,6 +72,8 @@ gcloud --project $GCP_PROJECT_ID projects add-iam-policy-binding $GCP_PROJECT_ID
 ```
 
 ### Link GKE Service Account to GCP Service Account
+
+> **Note:** The below steps needs to be performed only once per project.
 
 Add an IAM policy binding between the workload identity GCP Service Account and PD Label Controller GCP Service Account. This will link the PD Label Controller Kubernetes Service Account to PD Label Controller Kubernetes GCP Service Account.
 
