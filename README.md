@@ -14,6 +14,7 @@ Before you begin, ensure you have the following:
 
 - A Google Cloud Platform (GCP) project.
 - A Google Kubernetes Engine (GKE) cluster.
+- A container registry repository to host the Controller Docker image.
 - `kubectl` configured to communicate with your GKE cluster.
 - Python 3.9+ and `pip` installed for local development and testing.
 
@@ -36,6 +37,7 @@ export GCP_PROJECT_ID="" # Set your GCP project iD
 # Run the following commands to set additional environment variables
 export GCP_SA_NAME="pd-label-controller"                                      # You can modify this according to your needs
 export GCP_SA_EMAIL="$GCP_SA_NAME@${GCP_PROJECT_ID}.iam.gserviceaccount.com"  # DON'T change this
+export GCP_CUSTOM_ROLE_NAME="gke_pd_label_controller"                         # You can modify this according to your needs
 export CONTROLLER_NAMESPACE="pd-label-controller"                             # You can modify this according to your needs
 export CONTROLLER_SA_NAME="pd-label-controller"                               # You can modify this according to your needs
 ```
@@ -44,22 +46,37 @@ export CONTROLLER_SA_NAME="pd-label-controller"                               # 
 > - `GCP_PROJECT_ID` - The ID of the GCP project that your GKE cluster is running, and in which the Service Account will be created
 > - `GCP_SA_NAME` - The name of the GCP Service Account that will be created and used to update the labels on the GCP PDs
 > - `GCP_SA_EMAIL` - The full email of the GCP Service Account
+> - `GCP_CUSTOM_ROLE_NAME` - The name of the custom IAM role that will be attached to the GCP Service Account
 > - `CONTROLLER_NAMESPACE` - The GKE Kubernetes namespace in which you'll deploy the controller resources
 > - `CONTROLLER_SA_NAME` - The name of the GKE Kubernetes Service Account that will be created in within the cluster (in the chosen namespace)
 
 ### Create GCP Service Account
 
 ```bash
-gcloud iam service-accounts create $GCP_SA_NAME --display-name $GCP_SA_NAME
-gcloud projects add-iam-policy-binding $GCP_PROJECT_ID --member serviceAccount:$GCP_SA_EMAIL --role "roles/compute.storageAdmin"
+# Create tbe service account
+gcloud --project $GCP_PROJECT_ID iam service-accounts create $GCP_SA_NAME --display-name $GCP_SA_NAME
+
+# Create a custom role
+gcloud --project $GCP_PROJECT_ID iam roles create $GCP_CUSTOM_ROLE_NAME \
+  --title "GKE PD Label Controller" \
+  --description "Custom role for managing the labels of persistent disks by the GKE PD Label Controller" \
+  --permissions "compute.disks.get,compute.disks.setLabels" \
+  --stage "GA"
+
+# Assign the custom role to the service account
+gcloud --project $GCP_PROJECT_ID projects add-iam-policy-binding $GCP_PROJECT_ID \
+  --member serviceAccount:$GCP_SA_EMAIL \
+  --role "projects/$GCP_PROJECT_ID/roles/$GCP_CUSTOM_ROLE_NAME"
 ```
 
 ### Link GKE Service Account to GCP Service Account
 
+Add an IAM policy binding between the workload identity GCP Service Account and PD Label Controller GCP Service Account. This will link the PD Label Controller Kubernetes Service Account to PD Label Controller Kubernetes GCP Service Account.
+
 ```bash
-gcloud iam service-accounts add-iam-policy-binding $GCP_SA_EMAIL \
-  --role "roles/iam.workloadIdentityUser" \
-  --member "serviceAccount:$GCP_PROJECT_ID.svc.id.goog[${CONTROLLER_NAMESPACE:-"default"}/${CONTROLLER_SA_NAME}]"
+gcloud --project $GCP_PROJECT_ID iam service-accounts add-iam-policy-binding $GCP_SA_EMAIL \
+  --member "serviceAccount:$GCP_PROJECT_ID.svc.id.goog[${CONTROLLER_NAMESPACE}/${CONTROLLER_SA_NAME}]" \
+  --role "roles/iam.workloadIdentityUser"
 ```
 
 ### Deploy GKE PD Label Controller
@@ -119,15 +136,26 @@ cat install.yaml | envsubst | kubectl delete -f -
 # Delete the controller namespace from your GKE cluster
 kubectl delete namespace $CONTROLLER_NAMESPACE
 
+# Delete IAM policy bindings
+gcloud --project $GCP_PROJECT_ID projects remove-iam-policy-binding $GCP_PROJECT_ID \
+  --member serviceAccount:$GCP_SA_EMAIL \
+  --role="projects/$GCP_PROJECT_ID/roles/$GCP_CUSTOM_ROLE_NAME"
+gcloud --project $GCP_PROJECT_ID iam service-accounts remove-iam-policy-binding $GCP_SA_EMAIL \
+  --role "roles/iam.workloadIdentityUser" \
+  --member "serviceAccount:$GCP_PROJECT_ID.svc.id.goog[${CONTROLLER_NAMESPACE}/${CONTROLLER_SA_NAME}]"
+
+# Delete the GCP role
+gcloud --project $GCP_PROJECT_ID iam roles delete $GCP_CUSTOM_ROLE_NAME
+
 # Delete the GCP Service Account
-gcloud iam service-accounts delete $GCP_SA_EMAIL
+gcloud --project $GCP_PROJECT_ID iam service-accounts delete $GCP_SA_EMAIL
 ```
 
 ## Development
 
 ```bash
 docker build -t gke-pd-label-controller .
-docker tag gke-pd-label-controller danielvaknin/gke-pd-label-controller:v0.1.16 # Change the tag version
-docker push danielvaknin/gke-pd-label-controller:v0.1.16 # Change the tag version
+docker tag gke-pd-label-controller danielvaknin/gke-pd-label-controller:v0.1.27 # Change the tag version
+docker push danielvaknin/gke-pd-label-controller:v0.1.27 # Change the tag version
 # Once pushed, also update the tag version in the `install.yaml` file before redeploying
 ```
