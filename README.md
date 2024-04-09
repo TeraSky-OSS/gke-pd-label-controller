@@ -85,6 +85,17 @@ gcloud --project $GCP_PROJECT_ID iam service-accounts add-iam-policy-binding $GC
 
 ### Deploy GKE PD Label Controller
 
+#### Option 1: Using Helm
+
+```bash
+helm install pd-label-controller ./helm/pd-label-controller-1.0.0.tgz \
+  -n $CONTROLLER_NAMESPACE \
+  --create-namespace \
+  --set gcpServiceAccountEmail=${GCP_SA_EMAIL}
+```
+
+#### Option 2: Using Kubernetes Manifest
+
 ```bash
 kubectl create namespace $CONTROLLER_NAMESPACE
 cat install.yaml | envsubst | kubectl apply -f -
@@ -92,7 +103,15 @@ cat install.yaml | envsubst | kubectl apply -f -
 
 > **Note:** `envsubst` is being used to replace the placeholders in the YAML file with the relevant environment variables
 
-You can validate that the controller is working by watching its logs:
+### Validate Deployment
+
+Ensure that the pod is in `Running` state
+
+```bash
+kubectl -n $CONTROLLER_NAMESPACE get pod
+```
+
+Once running, you can validate that the controller is working by watching its logs:
 
 ```bash
 kubectl -n $CONTROLLER_NAMESPACE logs -f -l app.kubernetes.io/name=pd-label-controller
@@ -135,7 +154,8 @@ Run the following commands if you'd like to remove the controller from your envi
 
 ```bash
 # Delete the controller from your GKE cluster
-cat install.yaml | envsubst | kubectl delete -f -
+helm uninstall pd-label-controller -n $CONTROLLER_NAMESPACE  # if deployed using Helm
+cat install.yaml | envsubst | kubectl delete -f -            # if deployed using Kubernetes manifest
 
 # Delete the controller namespace from your GKE cluster
 kubectl delete namespace $CONTROLLER_NAMESPACE
