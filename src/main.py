@@ -111,6 +111,7 @@ for event in w.stream(v1.list_persistent_volume_claim_for_all_namespaces, timeou
             logging.info(f"PVC '{pvc_name}' is bound to PV '{pv_name}'")
             pv = v1.read_persistent_volume(name=pv_name)
 
+            gcp_pd_id = None
             if pv.spec.csi:
                 gcp_pd_id = pv.spec.csi.volume_handle
                 logging.info(f"Found GCP PD ID '{gcp_pd_id}' in PV '{pv_name}'")
