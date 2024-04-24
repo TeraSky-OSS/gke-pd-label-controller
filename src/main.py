@@ -114,11 +114,13 @@ for event in w.stream(v1.list_persistent_volume_claim_for_all_namespaces, timeou
             gcp_pd_id = None
             if pv.spec.csi:
                 gcp_pd_id = pv.spec.csi.volume_handle
-                logging.info(f"Found GCP PD ID '{gcp_pd_id}' in PV '{pv_name}'")
+            elif pv.spec.gce_persistent_disk:
+                gcp_pd_id = pv.spec.gce_persistent_disk.pd_name
             else:
                 logging.info(f"PV '{pv_name}' is not backed by a GCP PD")
 
             if gcp_pd_id:
+                logging.info(f"Found GCP PD ID '{gcp_pd_id}' in PV '{pv_name}'")
                 pvc_labels_annotation_value = pvc_annotations[RESERVED_PVC_ANNOTATION]
                 labels_string = pvc_labels_annotation_value.replace(' ', '')
 
