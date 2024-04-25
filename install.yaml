@@ -55,4 +55,7 @@ spec:
       serviceAccountName: ${CONTROLLER_SA_NAME}
       containers:
         - name: pd-label-controller
-          image: danielvaknin/gke-pd-label-controller:v0.1.27
+          image: danielvaknin/gke-pd-label-controller:v0.1.28
+          env:
+            - name: GCP_PROJECT_ID
+              value: ${GCP_PROJECT_ID}

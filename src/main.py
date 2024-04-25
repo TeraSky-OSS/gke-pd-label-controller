@@ -1,3 +1,4 @@
+import os
 import logging
 from google.cloud import compute_v1
 from google.api_core.exceptions import PreconditionFailed
@@ -9,6 +10,7 @@ from kubernetes.config import ConfigException
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
 
 RESERVED_PVC_ANNOTATION = 'pd-label-controller.terasky.com/labels'
+GCP_PROJECT_ID = os.environ['GCP_PROJECT_ID']
 
 try:
     # Try to load the in-cluster config, used when running inside a pod in the cluster
@@ -44,11 +46,7 @@ def attempt_label_update(project, zone, disk_name, labels, fingerprint):
     compute_client.set_labels(request=request)
     logging.info(f"Successfully updated labels for disk '{disk_name}'.")
 
-def update_disk_labels(disk_id, labels):
-    gcp_project = disk_id.split('/')[1]
-    gcp_zone = disk_id.split('/')[3]
-    gcp_disk_name = disk_id.split('/')[5]
-
+def update_disk_labels(gcp_zone, gcp_disk_name, labels):
     # Convert new labels list to dictionary
     new_labels = {}
     for label in labels:
@@ -65,7 +63,7 @@ def update_disk_labels(disk_id, labels):
 
     @retry
     def retry_update_labels():
-        existing_labels, fingerprint = fetch_disk_info(gcp_project, gcp_zone, gcp_disk_name)
+        existing_labels, fingerprint = fetch_disk_info(GCP_PROJECT_ID, gcp_zone, gcp_disk_name)
 
         # Filter labels to only labels created by Google
         google_managed_labels = {}
@@ -76,7 +74,7 @@ def update_disk_labels(disk_id, labels):
         updated_labels = {**google_managed_labels, **new_labels}  # Merge labels
 
         if updated_labels != existing_labels:
-            attempt_label_update(gcp_project, gcp_zone, gcp_disk_name, updated_labels, fingerprint)
+            attempt_label_update(GCP_PROJECT_ID, gcp_zone, gcp_disk_name, updated_labels, fingerprint)
         else:
             logging.info(f"Disk '{gcp_disk_name}' already contains all required labels.")
 
@@ -93,7 +91,7 @@ logging.info(f'GKE PD Label Controller (Developed by TeraSky)')
 logging.info(f'==============================================')
 
 w = watch.Watch()
-logging.info("Starting to watch for PVC creation/update events")
+logging.info(f"Starting to watch for PVC creation/update events (GCP project: {GCP_PROJECT_ID})")
 # Relevant docs: https://k8s-python.readthedocs.io/en/stable/genindex.html
 for event in w.stream(v1.list_persistent_volume_claim_for_all_namespaces, timeout_seconds=0):
     if event['type'] in ['ADDED', 'MODIFIED']:
@@ -111,16 +109,20 @@ for event in w.stream(v1.list_persistent_volume_claim_for_all_namespaces, timeou
             logging.info(f"PVC '{pvc_name}' is bound to PV '{pv_name}'")
             pv = v1.read_persistent_volume(name=pv_name)
 
-            gcp_pd_id = None
+            gcp_zone = None
+            gcp_pd_name = None
             if pv.spec.csi:
                 gcp_pd_id = pv.spec.csi.volume_handle
+                gcp_zone = gcp_pd_id.split('/')[3]
+                gcp_pd_name = gcp_pd_id.split('/')[5]
             elif pv.spec.gce_persistent_disk:
-                gcp_pd_id = pv.spec.gce_persistent_disk.pd_name
+                gcp_zone = pv.metadata.labels['topology.kubernetes.io/zone']
+                gcp_pd_name = pv.spec.gce_persistent_disk.pd_name
             else:
                 logging.info(f"PV '{pv_name}' is not backed by a GCP PD")
 
-            if gcp_pd_id:
-                logging.info(f"Found GCP PD ID '{gcp_pd_id}' in PV '{pv_name}'")
+            if gcp_zone and gcp_pd_name:
+                logging.info(f"PV '{pv_name}' is backed by the GCP PD '{gcp_pd_name}' in zone '{gcp_zone}'")
                 pvc_labels_annotation_value = pvc_annotations[RESERVED_PVC_ANNOTATION]
                 labels_string = pvc_labels_annotation_value.replace(' ', '')
 
@@ -131,5 +133,5 @@ for event in w.stream(v1.list_persistent_volume_claim_for_all_namespaces, timeou
                     labels.append({'key': key, 'value': value})
 
                 logging.info(f"Will apply the following labels to the backed PD: {labels}")
-                update_disk_labels(gcp_pd_id, labels)
+                update_disk_labels(gcp_zone, gcp_pd_name, labels)
                 logging.info('------------------------------')

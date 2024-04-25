@@ -43,7 +43,7 @@ export CONTROLLER_SA_NAME="pd-label-controller"                               # 
 ```
 
 > Explanation for the environment variables:
-> - `GCP_PROJECT_ID` - The ID of the GCP project that your GKE cluster is running, and in which the Service Account will be created
+> - `GCP_PROJECT_ID` - The ID of the GCP project that contains your GKE cluster, and in which the Service Account will be created
 > - `GCP_SA_NAME` - The name of the GCP Service Account that will be created and used to update the labels on the GCP PDs
 > - `GCP_SA_EMAIL` - The full email of the GCP Service Account
 > - `GCP_CUSTOM_ROLE_NAME` - The name of the custom IAM role that will be attached to the GCP Service Account
@@ -88,10 +88,11 @@ gcloud --project $GCP_PROJECT_ID iam service-accounts add-iam-policy-binding $GC
 #### Option 1: Using Helm
 
 ```bash
-helm install pd-label-controller ./helm/pd-label-controller-1.0.0.tgz \
+helm install pd-label-controller ./helm/pd-label-controller-1.0.1.tgz \
   -n $CONTROLLER_NAMESPACE \
   --create-namespace \
-  --set gcpServiceAccountEmail=${GCP_SA_EMAIL}
+  --set gcpServiceAccountEmail=${GCP_SA_EMAIL} \
+  --set gcpProjectId=${GCP_PROJECT_ID}
 ```
 
 #### Option 2: Using Kubernetes Manifest
@@ -178,8 +179,13 @@ gcloud --project $GCP_PROJECT_ID iam service-accounts delete $GCP_SA_EMAIL
 ## Development
 
 ```bash
+# Docker
 docker build -t gke-pd-label-controller .
-docker tag gke-pd-label-controller danielvaknin/gke-pd-label-controller:v0.1.27 # Change the tag version
-docker push danielvaknin/gke-pd-label-controller:v0.1.27 # Change the tag version
+docker tag gke-pd-label-controller danielvaknin/gke-pd-label-controller:v0.1.28 # Change the tag version
+docker push danielvaknin/gke-pd-label-controller:v0.1.28 # Change the tag version
 # Once pushed, also update the tag version in the `install.yaml` file before redeploying
+
+# Helm
+cd helm/
+helm package pd-label-controller/
 ```
